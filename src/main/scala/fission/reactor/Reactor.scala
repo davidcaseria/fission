@@ -1,18 +1,18 @@
 package fission.reactor
 
-import akka.actor.{Actor, ActorRef, Props}
-import fission.message.{Command, Request}
+import akka.persistence.{SnapshotOffer, PersistentActor}
+import fission.message.Event
 
-class Reactor(reactions: PartialFunction[Request, (Command, ActorRef)]) extends Actor {
+abstract class Reactor[T <: State] extends PersistentActor {
 
-  override def receive = {
-    case request: Request =>
-      println("In the reactor")
-      val (command, moderator) = reactions(request)
-      moderator forward command
+  override def persistenceId: String = self.path.name
+
+  var state: T
+
+  override def receiveRecover = {
+    case event: Event => state.update(event)
+    case SnapshotOffer(_, snapshot: T) => state = snapshot
   }
-}
 
-object Reactor {
-  def props(reactions: PartialFunction[Request, (Command, ActorRef)]) = Props(new Reactor(reactions))
+  def updateState(event: Event) = persist(event)(state.update.apply)
 }

@@ -1,8 +1,9 @@
-import akka.actor.{Actor, ActorSystem, Props}
+import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import fission.Fission
-import fission.message.{Ack, Command, Request}
+import fission.message.{Ack, Command, Event}
+import fission.reactor.{Reaction, Reactor, State}
 import org.json4s._
 
 import scala.concurrent.ExecutionContext
@@ -18,19 +19,40 @@ object Main extends App {
 
   implicit val formats = DefaultFormats
 
-  val testActor = system.actorOf(Props[TestActor], "test-actor")
+  val reactor = system.actorOf(Props[TestReactor], "test-reactor")
 
   Fission({
-    case Request("test", params, _, _) => (params.get.extract[TestCommand], testActor)
+    case "updateName" => Reaction[UpdateName](reactor)
   })
 }
 
-case class TestCommand(message: String) extends Command
+case class UpdateName(name: String) extends Command
 
-class TestActor extends Actor {
-  override def receive: Receive = {
-    case TestCommand(message) =>
-      println(message)
-      sender() ! Ack(JString(message))
+case class NameUpdated(name: String) extends Event
+
+class TestState extends State {
+
+  var name: String = "World"
+
+  override def update: PartialFunction[Event, Unit] = {
+    case NameUpdated(newName) =>
+      name = newName
+    case _ => println("Idk...")
+  }
+}
+
+class TestReactor extends Reactor[TestState] {
+
+  import org.json4s.JsonDSL._
+  
+  override var state: TestState = new TestState()
+
+  override def receiveCommand: Receive = {
+    case UpdateName(name) =>
+      val oldName = state.name
+      persist(NameUpdated(name)) { event =>
+        state.update(event)
+        sender() ! Ack(("oldName" -> oldName) ~ ("newName" -> state.name))
+      }
   }
 }

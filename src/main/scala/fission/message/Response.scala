@@ -1,10 +1,18 @@
 package fission.message
 
 import org.json4s.JsonAST.JValue
+import org.json4s.native.Serialization
 
 sealed trait Response
 
 case class Ack(result: JValue) extends Response
+
+object Ack {
+  import org.json4s._
+  implicit val formats = Serialization.formats(NoTypeHints)
+
+  def apply(result: Any) = new Ack(Extraction.decompose(result))
+}
 
 case class Nack(code: Int, message: String, data: Option[JValue]) extends Response
 

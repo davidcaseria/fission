@@ -1,18 +1,28 @@
 package fission.reactor
 
 import akka.persistence.{SnapshotOffer, PersistentActor}
-import fission.message.Event
+import fission.message.{Command, Event}
 
-abstract class Reactor[T <: State] extends PersistentActor {
+abstract class Reactor[S <: State] extends PersistentActor {
+
+  var state: S
 
   override def persistenceId: String = self.path.name
 
-  var state: T
-
-  override def receiveRecover = {
-    case event: Event => state.update(event)
-    case SnapshotOffer(_, snapshot: T) => state = snapshot
+  override def receiveCommand = {
+    case (command: Command, auth: Option[Any]) => handleCommand(auth).apply(command)
+    case "snap" => saveSnapshot(state)
   }
 
-  def updateState(event: Event) = persist(event)(state.update.apply)
+  override def receiveRecover = {
+    case event: Event => state.handleEvent(event)
+    case SnapshotOffer(_, snapshot: S) => state = snapshot
+  }
+
+  def handleCommand[T]: T => PartialFunction[Command, Unit]
+
+  def updateState(event: Event)(handler: Event => Unit) = persist(event) { event =>
+    state.handleEvent(event)
+    handler(event)
+  }
 }

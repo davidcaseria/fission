@@ -33,16 +33,16 @@ class Fission(reactions: PartialFunction[String, Reaction])
     implicit val serialization = native.Serialization // or native.Serialization
     implicit val formats = DefaultFormats
 
-    pathSingleSlash {
+    (pathSingleSlash & optionalHeaderValueByName("Authorization")) { auth =>
       get {
         handleWebsocketMessages(Flow[Message].collect({
           case TextMessage.Strict(msg) => parse(msg).extract[Request]
         })
-          .via(Flow[Request].mapAsync(4)(request => request.react(reactions(request.method))))
+          .via(Flow[Request].mapAsync(4)(request => request.react(reactions(request.method), auth)))
           .via(Flow[JValue].map(response => TextMessage.Strict(compact(render(response))))))
       } ~
         (post & decodeRequest & entity(as[Request])) { request =>
-        completeOrRecoverWith(request.react(reactions(request.method))) { extraction =>
+        completeOrRecoverWith(request.react(reactions(request.method), auth)) { extraction =>
           failWith(extraction)
         }
       }

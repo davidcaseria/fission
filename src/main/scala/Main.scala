@@ -34,25 +34,20 @@ class TestState extends State {
 
   var name: String = "World"
 
-  override def update: PartialFunction[Event, Unit] = {
-    case NameUpdated(newName) =>
-      name = newName
-    case _ => println("Idk...")
+  override def handleEvent = {
+    case NameUpdated(newName) => name = newName
   }
 }
 
 class TestReactor extends Reactor[TestState] {
 
-  import org.json4s.JsonDSL._
-  
   override var state: TestState = new TestState()
 
-  override def receiveCommand: Receive = {
+  override def handleCommand[String] = (auth) => {
     case UpdateName(name) =>
       val oldName = state.name
-      persist(NameUpdated(name)) { event =>
-        state.update(event)
-        sender() ! Ack(("oldName" -> oldName) ~ ("newName" -> state.name))
+      updateState(NameUpdated(name)) { event =>
+        sender() ! Ack(s"Goodbye $oldName, Hello ${state.name}")
       }
   }
 }

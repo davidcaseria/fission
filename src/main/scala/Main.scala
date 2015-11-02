@@ -2,7 +2,7 @@ import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import fission.Fission
-import fission.message.{Ack, Command, Event}
+import fission.message.{Nack, Ack, Command, Event}
 import fission.reactor.{Reaction, Reactor, State}
 import org.json4s._
 
@@ -39,15 +39,23 @@ class TestState extends State {
   }
 }
 
-class TestReactor extends Reactor[TestState] {
+class TestReactor extends Reactor[String, TestState] {
 
   override var state: TestState = new TestState()
 
-  override def handleCommand[String] = (auth) => {
+  override def authorize(auth: Option[String]) = {
+    case UpdateName(name) => auth.isDefined && auth.get == name
+  }
+
+  override def handleCommand = {
     case UpdateName(name) =>
-      val oldName = state.name
-      updateState(NameUpdated(name)) { event =>
-        sender() ! Ack(s"Goodbye $oldName, Hello ${state.name}")
+      if(state.name == name) {
+        sender() ! Nack(-32000, "Must change the name", Some(JString(name)))
+      } else {
+        val oldName = state.name
+        updateState(NameUpdated(name)) { event =>
+          sender() ! Ack(s"Goodbye $oldName, Hello ${state.name}")
+        }
       }
   }
 }

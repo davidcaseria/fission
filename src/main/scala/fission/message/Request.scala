@@ -17,7 +17,7 @@ object Request {
 
     implicit val formats = DefaultFormats
 
-    def react(reaction: Reaction, auth: Option[String])(implicit ec: ExecutionContext, timeout: Timeout): Future[JValue] = {
+    def react[A](reaction: Reaction)(implicit auth: Option[A], ec: ExecutionContext, t: Timeout): Future[JValue] = {
       val (command, reactor) = reaction(request)
       val response = ("jsonrpc" -> "2.0") ~ ("id" -> request.id)
       (reactor ? (command, auth)).mapTo[Response].collect({

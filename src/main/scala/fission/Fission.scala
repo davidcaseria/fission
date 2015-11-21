@@ -2,62 +2,65 @@ package fission
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.{Message, TextMessage}
-import akka.http.scaladsl.server.Directives
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.directives.Credentials
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Flow
 import akka.util.Timeout
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import fission.message.Request
-import fission.message.Request._
-import fission.reactor.Reaction.Reaction
-import org.json4s.JsonAST.JValue
-import org.json4s.native.JsonMethods._
+import fission.Fission.{Authenticator, RequestMapper}
+import fission.auth.Principal
 import org.json4s.{DefaultFormats, native}
+import scaldi.akka.AkkaInjectable
+import scaldi.{Injector, Module}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-class Fission(reactions: PartialFunction[String, Reaction])
-             (implicit system: ActorSystem, materializer: ActorMaterializer, executionContext: ExecutionContext) {
+/**
+  * @author David Caseria
+  */
+class Fission(implicit inj: Injector, system: ActorSystem) extends AkkaInjectable {
+  implicit val materializer = ActorMaterializer()
+  implicit val executionContext = system.dispatcher
 
   implicit val formats = DefaultFormats
+  implicit val serialization = native.Serialization
+  implicit val timeout = Timeout(30 seconds)
 
-  implicit val timeout = Timeout(5 seconds)
+  val authenticator = inject[Authenticator]
+  val requestMapper = inject[RequestMapper]
 
-  val routes = {
-
-    import Directives._
+  def routes(implicit executionContext: ExecutionContext, materializer: ActorMaterializer) = {
     import Json4sSupport._
 
-    implicit val serialization = native.Serialization // or native.Serialization
-    implicit val formats = DefaultFormats
-
-    pathSingleSlash {
-      get {
-        handleWebsocketMessages(Flow[Message].collect({
-          case TextMessage.Strict(msg) => parse(msg).extract[Request]
-        })
-          .via(Flow[Request].mapAsync(4)(request => request.react(reactions(request.method))))
-          .via(Flow[JValue].map(response => TextMessage.Strict(compact(render(response))))))
-      } ~
+    authenticateOAuth2(system.name, authenticator) { user =>
+      pathSingleSlash {
         (post & decodeRequest & entity(as[Request])) { request =>
-        completeOrRecoverWith(request.react(reactions(request.method))) { extraction =>
-          failWith(extraction)
+          val command = requestMapper(request)
+          if (!user.authorize(command)) {
+            complete(StatusCodes.Forbidden)
+          } else {
+            complete(command)
+          }
         }
       }
     }
   }
 
-  Http().bindAndHandle(routes, "localhost", 8080)
+  val port = inject[Int]('port)
+  Http().bindAndHandle(routes, "localhost", port)
 }
 
 object Fission {
 
-  implicit val formats = DefaultFormats
+  type Authenticator = Credentials => Option[Principal]
 
-  def apply(reactions: PartialFunction[String, Reaction])
-           (implicit system: ActorSystem, materializer: ActorMaterializer, executionContext: ExecutionContext) = {
-    new Fission(reactions)
+  type RequestMapper = Request => Command
+
+  val module = new Module {
+    binding identifiedBy 'port to 8080
   }
+
+  def apply()(implicit inj: Injector, system: ActorSystem): Fission = new Fission()(inj, system)
 }

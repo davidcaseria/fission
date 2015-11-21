@@ -1,6 +1,7 @@
 import akka.actor.ActorSystem
 import akka.http.scaladsl.server.directives.Credentials
-import fission.{Request, Command, Fission}
+import fission.router.Router
+import fission._
 import fission.Fission.{RequestMapper, Authenticator}
 import fission.auth.Principal
 import scaldi.Module
@@ -32,6 +33,12 @@ class AppModule extends Module {
       case "SendMessage" => request.mapTo[SendMessage]
     }
   })
+
+  binding toProvider new Router() {
+    override def receiveCommand: PartialFunction[Command, Message] = {
+      case _ => MethodNotFound
+    }
+  }
 }
 
 case class SendMessage(message: String) extends Command

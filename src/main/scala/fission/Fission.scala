@@ -11,6 +11,8 @@ import akka.util.Timeout
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import fission.Fission.{Authenticator, RequestMapper}
 import fission.auth.Principal
+import fission.http.Request
+import fission.message._
 import fission.router.Router
 import org.json4s.{DefaultFormats, native}
 import scaldi.akka.AkkaInjectable
@@ -33,16 +35,16 @@ class Fission(implicit inj: Injector, system: ActorSystem) extends AkkaInjectabl
 
   val authenticator = inject[Authenticator]
   val requestMapper = inject[RequestMapper]
-  val router = injectActorRef[Router]
+  val router = system.actorOf(injectActorProps[Router], "router")
 
   def routes(implicit executionContext: ExecutionContext, materializer: ActorMaterializer) = {
     import Json4sSupport._
 
-    authenticateOAuth2(system.name, authenticator) { user =>
+    authenticateOAuth2(system.name, authenticator) { principal =>
       pathSingleSlash {
         (post & decodeRequest & entity(as[Request])) { request =>
           val command = requestMapper(request)
-          if (!user.authorize(command)) {
+          if (!principal.authorize(command)) {
             complete(StatusCodes.Forbidden)
           } else {
             onComplete((router ? command).mapTo[Message]) {

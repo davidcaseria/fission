@@ -1,4 +1,4 @@
-package fission
+package fission.http
 
 import org.json4s.JsonAST.JValue
 

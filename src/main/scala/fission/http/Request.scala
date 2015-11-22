@@ -1,5 +1,6 @@
-package fission
+package fission.http
 
+import fission.message.Command
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JValue
 

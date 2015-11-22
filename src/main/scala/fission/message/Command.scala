@@ -1,6 +1,4 @@
-package fission
-
-import fission.auth.Principal
+package fission.message
 
 /**
   * @author David Caseria

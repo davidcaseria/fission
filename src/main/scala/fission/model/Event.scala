@@ -1,4 +1,4 @@
-package fission
+package fission.model
 
 /**
   * @author David Caseria

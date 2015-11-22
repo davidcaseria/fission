@@ -1,9 +1,12 @@
 import akka.actor.ActorSystem
 import akka.http.scaladsl.server.directives.Credentials
-import fission.router.Router
+import fission.Fission.{Authenticator, RequestMapper}
 import fission._
-import fission.Fission.{RequestMapper, Authenticator}
 import fission.auth.Principal
+import fission.model.{State, Aggregate, Event}
+import fission.http.Request
+import fission.message.{Ack, Command}
+import fission.router.Router
 import scaldi.Module
 import scaldi.akka.AkkaInjectable
 
@@ -31,17 +34,46 @@ class AppModule extends Module {
   bind[RequestMapper] to ((request: Request) => {
     request.method match {
       case "SendMessage" => request.mapTo[SendMessage]
+      case "ReadMessage" => request.mapTo[ReadMessage]
     }
   })
 
   binding toProvider new Router() {
-    override def receiveCommand: PartialFunction[Command, Message] = {
-      case _ => MethodNotFound
+    val messageAggregate = injectActorRef[MessageAggregate]
+
+    override def route = {
+      case _: SendMessage => messageAggregate
+      case _: ReadMessage => messageAggregate
     }
+  }
+
+  binding toProvider new MessageAggregate
+}
+
+class MessageAggregate extends Aggregate(new MessageState()) {
+  override def persistenceId: String = "message-aggregate"
+
+  override def receiveCommand: Receive = {
+    case SendMessage(message) => persist(MessageSent(message))(sender() ! Ack(_))
+    case ReadMessage(reason) => persist(MessageRead(state.currentMessage, reason))(sender() ! Ack(_))
   }
 }
 
+class MessageState extends State {
+  var currentMessage = ""
+  override def update = {
+    case MessageSent(message) => currentMessage = message
+    case _ =>
+  }
+}
+
+case class MessageSent(message: String) extends Event
+
 case class SendMessage(message: String) extends Command
+
+case class ReadMessage(reason: Option[String]) extends Command
+
+case class MessageRead(message: String, reason: Option[String]) extends Event
 
 case class User(token: String) extends Principal {
   override def authorize(command: Command): Boolean = true

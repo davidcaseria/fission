@@ -1,6 +1,6 @@
 package fission.auth
 
-import fission.Command
+import fission.message.Command
 
 /**
   * @author David Caseria

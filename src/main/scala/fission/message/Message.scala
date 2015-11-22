@@ -1,8 +1,10 @@
-package fission
+package fission.message
 
-import org.json4s.{DefaultFormats, Extraction}
+import fission.model.Event
+import fission.http.Response
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s.{DefaultFormats, Extraction}
 
 /**
   * @author David Caseria

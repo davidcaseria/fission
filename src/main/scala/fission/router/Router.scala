@@ -1,7 +1,7 @@
 package fission.router
 
-import akka.actor.Actor
-import fission.{Message, Command}
+import akka.actor.{Actor, ActorRef}
+import fission.message.{Command, MethodNotFound}
 import scaldi.Injector
 import scaldi.akka.AkkaInjectable
 
@@ -11,8 +11,9 @@ import scaldi.akka.AkkaInjectable
 abstract class Router(implicit inj: Injector) extends Actor with AkkaInjectable {
 
   override def receive = {
-    case command: Command => sender() ! receiveCommand.apply(command)
+    case command: Command if route.isDefinedAt(command) => route.apply(command) forward command
+    case _ => sender() ! MethodNotFound
   }
 
-  def receiveCommand: PartialFunction[Command, Message]
+  def route: PartialFunction[Command, ActorRef]
 }

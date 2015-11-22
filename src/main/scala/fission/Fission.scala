@@ -44,7 +44,7 @@ class Fission(implicit inj: Injector, system: ActorSystem) extends AkkaInjectabl
       pathSingleSlash {
         (post & decodeRequest & entity(as[Request])) { request =>
           val command = requestMapper(request)
-          if (!principal.authorize(command)) {
+          if (!principal.authorize.apply(command)) {
             complete(StatusCodes.Forbidden)
           } else {
             onComplete((router ? command).mapTo[Message]) {

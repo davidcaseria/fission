@@ -6,5 +6,5 @@ import fission.message.Command
   * @author David Caseria
   */
 trait Principal {
-  def authorize(command: Command): Boolean
+  def authorize: PartialFunction[Command, Boolean]
 }

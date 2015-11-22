@@ -2,21 +2,24 @@ package fission.model
 
 import akka.actor.ActorLogging
 import akka.persistence.{PersistentActor, SnapshotOffer}
+import fission.message.Ack
 
 /**
   * @author David Caseria
   */
 abstract class Entity[T <: State](var state: T) extends PersistentActor with ActorLogging {
 
-  def persist(event: Event)(callback: Event => Unit) = {
-    super.persist(event) { event =>
-      state.update.apply(event)
-      callback(event)
+  def acknowledge(event: Event): Unit = {
+    persist(event) { event =>
+      applyEvent.apply(event)
+      sender() ! Ack(event)
     }
   }
 
+  def applyEvent: PartialFunction[Event, Unit]
+
   override def receiveRecover: Receive = {
-    case event: Event => state.update(event)
+    case event: Event => applyEvent.apply(event)
     case SnapshotOffer(_, snapshot: T) => state = snapshot
   }
 }
